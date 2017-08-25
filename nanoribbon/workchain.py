@@ -100,22 +100,21 @@ class NanoribbonWorkChain(WorkChain):
                       'e2(1)': 0.0,
                       'e2(2)': cell_b/cell_a,
                       'e2(3)': 0.0,
-                      'nx': 10, # Number of points in the plane
-                      'ny': 10,
+                      'nx': 300, # Number of points in the plane
+                      'ny': 300,
                       'fileout': '_orbital_midz.dat',
                   },
         })
         inputs['parameters'] = parameters
 
- #       settings = ParameterData(dict={'additional_retrieve_list':['vacuum_hartree.dat']})
- #       inputs['settings'] = settings
-
         inputs['_options'] = {
             "resources": {"num_machines": 1},
             "max_wallclock_seconds": 10 * 60,
-            # workaround for bug in PpCalculator. We don't want to retrive this huge intermediate file.
-#            "append_text": u"rm -v aiida.filplot\n",
+            "append_text": u"gzip *.dat\n",
         }
+
+        settings = ParameterData(dict={'additional_retrieve_list':['*.dat.gz']})
+        inputs['settings'] = settings
 
         future = submit(PpCalculation.process(), **inputs)
         return ToContext(hartree=Calc(future))
@@ -166,7 +165,7 @@ class NanoribbonWorkChain(WorkChain):
         inputs['_options'] = {
             "resources": {"num_machines": 1},
             "max_wallclock_seconds": 10 * 60,
-            # workaround for bug in PpCalculator. We don't want to retrive this huge intermediate file.
+            # workaround for flaw in PpCalculator. We don't want to retrive this huge intermediate file.
             "append_text": u"rm -v aiida.filplot\n",
         }
 
