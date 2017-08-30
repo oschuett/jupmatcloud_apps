@@ -11,7 +11,7 @@ from aiida.orm.data.array.bands import BandsData
 if not is_dbenv_loaded():
     load_dbenv()
 
-
+#===============================================================================
 def find_bandgap(bandsdata, number_electrons=None, fermi_energy=None):
     """
     Tries to guess whether the bandsdata represent an insulator.
@@ -183,11 +183,11 @@ def find_bandgap(bandsdata, number_electrons=None, fermi_energy=None):
             return True, gap, homo, lumo
 
 
-
-def get_calc_obj(bands_object):
-    bands_calc_obj=None
-    scf_calc_obj=None
-    hartree_calc_obj=None
+#===============================================================================
+def get_calc_obj_old(bands_object):
+    bands_calc_obj = None
+    scf_calc_obj = None
+    hartree_calc_obj = None
     RemoteData = DataFactory('remote')
     StructureData = DataFactory('structure') 
     bands_calc_obj=bands_object.get_inputs()[0]
@@ -205,12 +205,37 @@ def get_calc_obj(bands_object):
                 hartree_calc_obj=out
             except:
                 continue
-            
+
     return bands_calc_obj, scf_calc_obj, hartree_calc_obj,tmp_str
 
-    
-    
 
+#===============================================================================
+def get_calc_obj_old(bands_object):
+    bands_calc_obj = None
+    scf_calc_obj = None
+    hartree_calc_obj = None
+    RemoteData = DataFactory('remote')
+    StructureData = DataFactory('structure') 
+    bands_calc_obj=bands_object.get_inputs()[0]
+
+    for inp in bands_calc_obj.get_inputs():
+        if type(inp) == RemoteData :
+            tmp=inp
+        if type(inp) == StructureData:
+            tmp_str=inp
+    scf_calc_obj=tmp.get_inputs()[0]
+    for out in  tmp.get_outputs():
+        if type(out) == PpCalculation:
+            try:
+                out.res['vacuum_level']
+                hartree_calc_obj=out
+            except:
+                continue
+
+    return bands_calc_obj, scf_calc_obj, hartree_calc_obj,tmp_str
+
+
+#===============================================================================
 def plot_b(hartree_run, bands_run,scf_fun,erang, allign,ax1,ax2=None):
 
 #    bands_run=load_node(bands_n)
@@ -231,7 +256,7 @@ def plot_b(hartree_run, bands_run,scf_fun,erang, allign,ax1,ax2=None):
             ax1.plot(x, bands[0,:,i], color='gray')
         else:
             ax1.plot(x, bands[0,:,i], color='gray')
-            
+
         if ax2 != None:
             ax2.plot(x, bands[1,:,i], color='blue')
         j=0
@@ -250,42 +275,42 @@ def plot_b(hartree_run, bands_run,scf_fun,erang, allign,ax1,ax2=None):
 #    ax1.axes.get_xaxis().set_visible(False)
 
 
-def plot_bands(bands_object, ax1,ax2=None):
+##===============================================================================
+#def plot_bands(bands_object, ax1,ax2=None):
+#    print "id:",bands_object.pk, 
+#    bands_calc_obj=bands_object.get_inputs()[0]
+#    RemoteData = DataFactory('remote')
+#    StructureData = DataFactory('structure') 
+#
+#    for inp in bands_calc_obj.get_inputs():
+#        if type(inp) == RemoteData :
+#            tmp=inp
+#        if type(inp) == StructureData:
+#            tmp_str=inp
+#    arr= tmp_str.get_composition()
+#    print "formula:",arr,
+#    scf_calc_obj=tmp.get_inputs()[0]
+#
+#    for out in  tmp.get_outputs():
+#        if type(out) == PpCalculation:
+#            hartree_cal_obj=out
+#
+#
+#    fermi_energy= bands_calc_obj.res['fermi_energy']
+#    noe=bands_calc_obj.res['number_of_electrons']
+##    print "band gap:", find_bandgap(bands_object, fermi_energy=fermi_energy),
+#    print "Magnetization:problem", # scf_calc_obj.res['fermi_energy'], #scf_calc_obj.res['absolute_magnetization_units'],
+#    print "Total energy", scf_calc_obj.res['energy'],  scf_calc_obj.res['energy_units']
+#
+#    plot_b(hartree_cal_obj, bands_calc_obj,ax1,ax2)
 
-    print "id:",bands_object.pk, 
-    bands_calc_obj=bands_object.get_inputs()[0]
-    RemoteData = DataFactory('remote')
-    StructureData = DataFactory('structure') 
-    
 
-    for inp in bands_calc_obj.get_inputs():
-        if type(inp) == RemoteData :
-            tmp=inp
-        if type(inp) == StructureData:
-            tmp_str=inp
-    arr= tmp_str.get_composition()
-    print "formula:",arr,
-    scf_calc_obj=tmp.get_inputs()[0]
-
-    for out in  tmp.get_outputs():
-        if type(out) == PpCalculation:
-            hartree_cal_obj=out
-
-
-    fermi_energy= bands_calc_obj.res['fermi_energy']
-    noe=bands_calc_obj.res['number_of_electrons']
-#    print "band gap:", find_bandgap(bands_object, fermi_energy=fermi_energy),
-    print "Magnetization:problem", # scf_calc_obj.res['fermi_energy'], #scf_calc_obj.res['absolute_magnetization_units'],
-    print "Total energy", scf_calc_obj.res['energy'],  scf_calc_obj.res['energy_units']
-
-    plot_b(hartree_cal_obj, bands_calc_obj,ax1,ax2)
-
-
+#===============================================================================
 def get_all_properties(node):
     props = {}
-    
+
     props['pk'] = node.pk
-    
+
     # gather more properties
     bands_calc_obj, scf_calc_obj, hartree_calc_obj, struct = get_calc_obj(node)
     props['bands_calc_obj'] = bands_calc_obj
@@ -297,7 +322,7 @@ def get_all_properties(node):
         props['amag'] = scf_calc_obj.res['absolute_magnetization']
     else:
         props['amag'] = 0.0
-        
+
     if hasattr(scf_calc_obj.res, "total_magnetization"):
         props['tmag'] = scf_calc_obj.res['total_magnetization']
     else:
@@ -326,6 +351,8 @@ def get_all_properties(node):
 
     return(props)
 
+
+#===============================================================================
 def plot_thumbnail(ax, ase_struct):
     s = ase_struct.repeat((2,1,1))
 
@@ -342,7 +369,7 @@ def plot_thumbnail(ax, ase_struct):
     ax.axes.set_ylim([5,s.cell[1][1]-5])
     ax.set_axis_bgcolor((0.423,0.690,0.933))
     ax.axes.get_yaxis().set_visible(False)
-    
+
     name = ase_struct.get_chemical_formula() # get name before repeat
     ax.set_xlabel(name, fontsize=12)
     ax.tick_params(axis='x', which='both', bottom='off', top='off',labelbottom='off')

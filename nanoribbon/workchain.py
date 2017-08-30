@@ -33,6 +33,7 @@ class NanoribbonWorkChain(WorkChain):
             #cls.run_export_hartree,
             #cls.calc_vacuum_level,
             #cls.run_bands,
+            cls.run_output,
         )
         spec.dynamic_output()
 
@@ -67,18 +68,21 @@ class NanoribbonWorkChain(WorkChain):
         assert(prev_calc.get_state() == 'FINISHED')
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
-        structure = prev_calc.inp.structure
-        cell_a = structure.cell[0][0]
-        cell_b = structure.cell[1][1]
-        cell_c = structure.cell[2][2]
-        midz = cell_c/2 + 1
-
         nel = prev_calc.res.number_of_electrons
         nkpt = prev_calc.res.number_of_k_points
         kband1 = int(nel/2) - 1
         kband2 = int(nel/2) + 2
         kpoint1 = round(0.1*nkpt)
         kpoint2 = round(nkpt+1-0.1*nkpt)
+
+        structure = prev_calc.inp.structure
+        cell_a = structure.cell[0][0]
+        cell_b = structure.cell[1][1]
+        cell_c = structure.cell[2][2]
+
+        start_z = cell_c/2.0 + 1.0 # one angstrom above molecule
+        end_z = start_z + 3.0
+        dots_per_angstrom = 20
 
         parameters = ParameterData(dict={
                   'inputpp':{
@@ -89,20 +93,24 @@ class NanoribbonWorkChain(WorkChain):
                       'kband(2)': kband2,
                   },
                   'plot':{
-                      'iflag': 2, # 2D plot
-                      'output_format': 7, # format suitable for gnuplot   (2D) x, y, f(x,y)
+                      'iflag': 3, # 3D plot
+                      'output_format': 4, # format as gOpenMol format file
                       'x0(1)': 0.0, #3D vector, origin of the plane (in alat units)
                       'x0(2)': 0.0,
-                      'x0(3)': midz/cell_a,
-                      'e1(1)': cell_a/cell_a, #3D vectors which determine the plotting plane (in alat units)
+                      'x0(3)': start_z/cell_a,
+                      'e1(1)': cell_a/cell_a, #3D vectors which determine the plotting parallelepiped (in alat units)
                       'e1(2)': 0.0,
                       'e1(3)': 0.0,
                       'e2(1)': 0.0,
                       'e2(2)': cell_b/cell_a,
                       'e2(3)': 0.0,
-                      'nx': 300, # Number of points in the plane
-                      'ny': 300,
-                      'fileout': '_orbital_midz.dat',
+                      'e3(1)': 0.0,
+                      'e3(2)': 0.0,
+                      'e3(3)': (end_z - start_z)/cell_a,
+                      'nx': int(cell_a*dots_per_angstrom), # resolution
+                      'ny': int(cell_b*dots_per_angstrom),
+                      'nz': 4,
+                      'fileout': '_orbital.cube',
                   },
         })
         inputs['parameters'] = parameters
@@ -110,10 +118,10 @@ class NanoribbonWorkChain(WorkChain):
         inputs['_options'] = {
             "resources": {"num_machines": 1},
             "max_wallclock_seconds": 10 * 60,
-            "append_text": u"gzip *.dat\n",
+            "append_text": u"gzip *.cube\n",
         }
 
-        settings = ParameterData(dict={'additional_retrieve_list':['*.dat.gz']})
+        settings = ParameterData(dict={'additional_retrieve_list':['*.cube.gz']})
         inputs['settings'] = settings
 
         future = submit(PpCalculation.process(), **inputs)
@@ -195,6 +203,13 @@ class NanoribbonWorkChain(WorkChain):
         structure = prev_calc.inp.structure
         parent_folder = prev_calc.out.remote_folder
         return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', precision=4.0, min_kpoints=10)
+
+    #============================================================================================================
+    def run_output(self):
+        # copy context to output
+        for k in dir(self.ctx):
+            # Can not output calc object = TODO TODO TODOonly output Data objects not the , hence calculation can nnot output calc object, becau
+            self.out(k, self.ctx[k].out.retrieved)
 
     #============================================================================================================
     def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, parent_folder=None):
