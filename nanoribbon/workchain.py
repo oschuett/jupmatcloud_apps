@@ -26,13 +26,13 @@ class NanoribbonWorkChain(WorkChain):
         spec.input("structure", valid_type=StructureData)
         spec.input("precision", valid_type=Float, default=Float(1.0), required=False)
         spec.outline(
-            #cls.run_cell_opt1,
-            #cls.run_cell_opt2,
+            cls.run_cell_opt1,
+            cls.run_cell_opt2,
             cls.run_scf,
             cls.run_export_orbitals,
-            #cls.run_export_hartree,
-            #cls.calc_vacuum_level,
-            #cls.run_bands,
+            cls.run_export_hartree,
+            cls.calc_vacuum_level,
+            cls.run_bands,
             cls.run_output,
         )
         spec.dynamic_output()
@@ -64,7 +64,9 @@ class NanoribbonWorkChain(WorkChain):
         inputs = {}
         inputs['code'] = self.inputs.pp_code
 
-        prev_calc = self.ctx.scf
+        #prev_calc = self.ctx.scf
+        prev_calc = load_node(602)
+        
         assert(prev_calc.get_state() == 'FINISHED')
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
@@ -74,15 +76,6 @@ class NanoribbonWorkChain(WorkChain):
         kband2 = int(nel/2) + 2
         kpoint1 = round(0.1*nkpt)
         kpoint2 = round(nkpt+1-0.1*nkpt)
-
-        structure = prev_calc.inp.structure
-        cell_a = structure.cell[0][0]
-        cell_b = structure.cell[1][1]
-        cell_c = structure.cell[2][2]
-
-        start_z = cell_c/2.0 + 1.0 # one angstrom above molecule
-        end_z = start_z + 3.0
-        dots_per_angstrom = 20
 
         parameters = ParameterData(dict={
                   'inputpp':{
@@ -94,38 +87,55 @@ class NanoribbonWorkChain(WorkChain):
                   },
                   'plot':{
                       'iflag': 3, # 3D plot
-                      'output_format': 4, # format as gOpenMol format file
-                      'x0(1)': 0.0, #3D vector, origin of the plane (in alat units)
-                      'x0(2)': 0.0,
-                      'x0(3)': start_z/cell_a,
-                      'e1(1)': cell_a/cell_a, #3D vectors which determine the plotting parallelepiped (in alat units)
-                      'e1(2)': 0.0,
-                      'e1(3)': 0.0,
-                      'e2(1)': 0.0,
-                      'e2(2)': cell_b/cell_a,
-                      'e2(3)': 0.0,
-                      'e3(1)': 0.0,
-                      'e3(2)': 0.0,
-                      'e3(3)': (end_z - start_z)/cell_a,
-                      'nx': int(cell_a*dots_per_angstrom), # resolution
-                      'ny': int(cell_b*dots_per_angstrom),
-                      'nz': 4,
+                      'output_format': 6, # CUBE format
                       'fileout': '_orbital.cube',
                   },
         })
         inputs['parameters'] = parameters
 
+        append_text = ur"""
+cat > postprocess.py << EOF
+
+from glob import glob
+import numpy as np
+import gzip
+
+for fn in glob("*.cube"):
+    # parse
+    lines = open(fn).readlines()
+    header = np.fromstring("".join(lines[2:6]), sep=' ').reshape(4,4)
+    natoms, nx, ny, nz = header[:,0].astype(int)
+    cube = np.fromstring("".join(lines[natoms+6:]), sep=' ').reshape(nx, ny, nz)
+
+    # plan
+    dz = header[3,3]
+    bohr = int(1.0 / dz)
+    z0 = nz/2 + 2*bohr # start two bohr above surface
+    z1 = z0   + 4*bohr # take four layers at one bohr distance
+    zcuts = range(z0, z1+1, bohr)
+
+    # output
+    lines[2] = "%5.d 0.0 0.0 %f\n"%(natoms,  z0*dz) # change offset header
+    lines[5] = "%6.d 0.0 0.0 %f\n"%(len(zcuts), dz) # change shape header
+    with gzip.open(fn+".gz", "w") as f:
+        f.write("".join(lines[:natoms+6])) # write header
+        np.savetxt(f, cube[:,:,zcuts].reshape(-1, 6), fmt="%.5e")
+EOF
+
+python ./postprocess.py
+"""
+        
         inputs['_options'] = {
             "resources": {"num_machines": 1},
             "max_wallclock_seconds": 10 * 60,
-            "append_text": u"gzip *.cube\n",
+            "append_text": append_text,
         }
 
         settings = ParameterData(dict={'additional_retrieve_list':['*.cube.gz']})
         inputs['settings'] = settings
 
         future = submit(PpCalculation.process(), **inputs)
-        return ToContext(hartree=Calc(future))
+        return ToContext(orbitals=Calc(future))
 
 
     #============================================================================================================
@@ -208,7 +218,7 @@ class NanoribbonWorkChain(WorkChain):
     def run_output(self):
         # copy context to output
         for k in dir(self.ctx):
-            # Can not output calc object = TODO TODO TODOonly output Data objects not the , hence calculation can nnot output calc object, becau
+            # Can only output Data objects, Calculation objects are not allowed
             self.out(k, self.ctx[k].out.retrieved)
 
     #============================================================================================================

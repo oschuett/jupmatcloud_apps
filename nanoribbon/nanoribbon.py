@@ -182,35 +182,8 @@ def find_bandgap(bandsdata, number_electrons=None, fermi_energy=None):
                                 "Revise the code!")
             return True, gap, homo, lumo
 
-
 #===============================================================================
-def get_calc_obj_old(bands_object):
-    bands_calc_obj = None
-    scf_calc_obj = None
-    hartree_calc_obj = None
-    RemoteData = DataFactory('remote')
-    StructureData = DataFactory('structure') 
-    bands_calc_obj=bands_object.get_inputs()[0]
-
-    for inp in bands_calc_obj.get_inputs():
-        if type(inp) == RemoteData :
-            tmp=inp
-        if type(inp) == StructureData:
-            tmp_str=inp
-    scf_calc_obj=tmp.get_inputs()[0]
-    for out in  tmp.get_outputs():
-        if type(out) == PpCalculation:
-            try:
-                out.res['vacuum_level']
-                hartree_calc_obj=out
-            except:
-                continue
-
-    return bands_calc_obj, scf_calc_obj, hartree_calc_obj,tmp_str
-
-
-#===============================================================================
-def get_calc_obj_old(bands_object):
+def get_calc_obj(bands_object):
     bands_calc_obj = None
     scf_calc_obj = None
     hartree_calc_obj = None
