@@ -117,12 +117,12 @@ for fn in glob("*.cube"):
     lines[5] = "%6.d 0.0 0.0 %f\n"%(len(zcuts), dz) # change shape header
     with gzip.open(fn+".gz", "w") as f:
         f.write("".join(lines[:natoms+6])) # write header
-        np.savetxt(f, cube[:,:,zcuts].reshape(-1, len(zcut)), fmt="%.5e")
+        np.savetxt(f, cube[:,:,zcuts].reshape(-1, len(zcuts)), fmt="%.5e")
 EOF
 
 python ./postprocess.py
 """
-        
+
         inputs['_options'] = {
             "resources": {"num_machines": 1},
             "max_wallclock_seconds": 10 * 60,
