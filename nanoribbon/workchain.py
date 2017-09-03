@@ -16,6 +16,8 @@ from aiida.orm.querybuilder import QueryBuilder
 from aiida.work.workchain import WorkChain, ToContext, Calc
 from aiida.work.run import run, async, submit, restart
 
+import numpy as np
+
 class NanoribbonWorkChain(WorkChain):
 
     @classmethod
@@ -51,10 +53,9 @@ class NanoribbonWorkChain(WorkChain):
 
     #============================================================================================================
     def run_scf(self):
-        #prev_calc = self.ctx.cell_opt2
-        #assert(prev_calc.get_state() == 'FINISHED')
-        #structure = prev_calc.out.output_structure
-        structure = self.inputs.structure
+        prev_calc = self.ctx.cell_opt2
+        assert(prev_calc.get_state() == 'FINISHED')
+        structure = prev_calc.out.output_structure
         return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=2.0, min_kpoints=5)
 
     #============================================================================================================
@@ -63,10 +64,7 @@ class NanoribbonWorkChain(WorkChain):
 
         inputs = {}
         inputs['code'] = self.inputs.pp_code
-
-        #prev_calc = self.ctx.scf
-        prev_calc = load_node(602)
-        
+        prev_calc = self.ctx.scf
         assert(prev_calc.get_state() == 'FINISHED')
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
@@ -119,7 +117,7 @@ for fn in glob("*.cube"):
     lines[5] = "%6.d 0.0 0.0 %f\n"%(len(zcuts), dz) # change shape header
     with gzip.open(fn+".gz", "w") as f:
         f.write("".join(lines[:natoms+6])) # write header
-        np.savetxt(f, cube[:,:,zcuts].reshape(-1, 6), fmt="%.5e")
+        np.savetxt(f, cube[:,:,zcuts].reshape(-1, len(zcut)), fmt="%.5e")
 EOF
 
 python ./postprocess.py
@@ -149,7 +147,7 @@ python ./postprocess.py
         assert(prev_calc.get_state() == 'FINISHED')
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
-        structure = prev_calc.out.output_structure
+        structure = prev_calc.inp.structure
         cell_a = structure.cell[0][0]
         cell_b = structure.cell[1][1]
         cell_c = structure.cell[2][2]
