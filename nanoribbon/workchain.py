@@ -14,7 +14,7 @@ from aiida.orm.computer import Computer
 from aiida.orm.querybuilder import QueryBuilder
 
 from aiida.work.workchain import WorkChain, ToContext, Calc
-from aiida.work.run import run, async, submit, restart
+from aiida.work.run import run, async, submit
 
 import numpy as np
 
