@@ -33,9 +33,7 @@ class NanoribbonWorkChain(WorkChain):
             cls.run_scf,
             cls.run_export_orbitals,
             cls.run_export_hartree,
-            cls.calc_vacuum_level,
             cls.run_bands,
-            cls.run_output,
         )
         spec.dynamic_output()
 
@@ -63,6 +61,7 @@ class NanoribbonWorkChain(WorkChain):
         self.report("Running pp.x to export KS orbitals")
 
         inputs = {}
+        inputs['_label'] = "export_orbitals"
         inputs['code'] = self.inputs.pp_code
         prev_calc = self.ctx.scf
         assert(prev_calc.get_state() == 'FINISHED')
@@ -141,6 +140,7 @@ python ./postprocess.py
         self.report("Running pp.x to export hartree potential")
 
         inputs = {}
+        inputs['_label'] = "export_hartree"
         inputs['code'] = self.inputs.pp_code
 
         prev_calc = self.ctx.scf
@@ -190,21 +190,6 @@ python ./postprocess.py
 
 
     #============================================================================================================
-    def calc_vacuum_level(self):
-        self.report("Calculating vacuum level")
-        prev_calc = self.ctx.hartree
-        assert(prev_calc.get_state() == 'FINISHED')
-
-        fn = prev_calc.out.retrieved.get_abs_path("vacuum_hartree.dat")
-        data = np.loadtxt(fn)
-        vacuum_level = np.mean(data[:,2])
-        self.report("Found vacuum level: %f"%vacuum_level)
-
-        output_parameters = ParameterData(dict={'vacuum_level':vacuum_level})
-        self.out("output_parameters", output_parameters)
-
-
-    #============================================================================================================
     def run_bands(self):
         prev_calc = self.ctx.scf
         assert(prev_calc.get_state() == 'FINISHED')
@@ -212,18 +197,13 @@ python ./postprocess.py
         parent_folder = prev_calc.out.remote_folder
         return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', precision=4.0, min_kpoints=10)
 
-    #============================================================================================================
-    def run_output(self):
-        # copy context to output
-        for k in dir(self.ctx):
-            # Can only output Data objects, Calculation objects are not allowed
-            self.out(k, self.ctx[k].out.retrieved)
 
     #============================================================================================================
     def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, parent_folder=None):
         self.report("Running pw.x for "+label)
 
         inputs = {}
+        inputs['_label'] = label
         inputs['code'] = self.inputs.pw_code
         inputs['structure'] = structure
         inputs['parameters'] =  self._get_parameters(structure, runtype)
