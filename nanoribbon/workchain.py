@@ -127,16 +127,17 @@ class NanoribbonWorkChain(WorkChain):
         inputs = {}
         inputs['_label'] = "export_orbitals"
         inputs['code'] = self.inputs.pp_code
-        prev_calc = self.ctx.band
+        prev_calc = self.ctx.bands
         assert(prev_calc.get_state() == 'FINISHED')
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
         nel = prev_calc.res.number_of_electrons
         nkpt = prev_calc.res.number_of_k_points
+        nspin = prev_calc.res.number_of_spin_components
         kband1 = int(nel/2) - 4
         kband2 = int(nel/2) + 5
-        kpoint1 = round(0.1*nkpt)
-        kpoint2 = round(nkpt+1-0.1*nkpt)
+        kpoint1 = 1
+        kpoint2 = nkpt * nspin
 
         parameters = ParameterData(dict={
                   'inputpp':{
