@@ -7,6 +7,7 @@ from aiida.orm.data.upf import get_pseudos_dict, get_pseudos_from_structure
 
 from aiida.orm.calculation.job.quantumespresso.pw import PwCalculation
 from aiida.orm.calculation.job.quantumespresso.pp import PpCalculation
+from aiida.orm.calculation.job.quantumespresso.projwfc import ProjwfcCalculation
 
 from aiida.orm import load_node
 from aiida.orm.code import Code
@@ -25,6 +26,7 @@ class NanoribbonWorkChain(WorkChain):
         super(NanoribbonWorkChain, cls).define(spec)
         spec.input("pw_code", valid_type=Code)
         spec.input("pp_code", valid_type=Code)
+        spec.input("projwfc_code", valid_type=Code)
         spec.input("structure", valid_type=StructureData)
         spec.input("precision", valid_type=Float, default=Float(1.0), required=False)
         spec.outline(
@@ -34,6 +36,7 @@ class NanoribbonWorkChain(WorkChain):
             cls.run_export_hartree,
             cls.run_bands,
             cls.run_export_orbitals,
+            #cls.run_export_pdos,
         )
         spec.dynamic_output()
 
@@ -199,6 +202,40 @@ python ./postprocess.py
         future = submit(PpCalculation.process(), **inputs)
         return ToContext(orbitals=Calc(future))
 
+    
+    #============================================================================================================
+    def run_export_pdos(self):
+        self.report("Running projwfc.x to export PDOS")
+        
+        inputs = {}
+        inputs['_label'] = "export_pdos"
+        inputs['code'] = self.inputs.projwfc_code
+        prev_calc = self.ctx.bands
+        assert(prev_calc.get_state() == 'FINISHED')
+        inputs['parent_folder'] = prev_calc.out.remote_folder
+        
+        parameters = ParameterData(dict={
+                  'projwfc':{
+                      'ngauss': 1,
+                      'kbanddegauss': 0.007,
+                      'DeltaE': 0.01,
+                      'filproj': 'the_k_projection.out',
+                      'kresolveddos': True,
+                  },
+        })
+        inputs['parameters'] = parameters
+
+        inputs['_options'] = {
+            "resources": {"num_machines": 1},
+            "max_wallclock_seconds": 10 * 60, # 10 minutes
+        }
+
+        settings = ParameterData(dict={'additional_retrieve_list':['*.xml']})
+        inputs['settings'] = settings
+
+        future = submit(ProjwfcCalculation.process(), **inputs)
+        return ToContext(orbitals=Calc(future))
+
 
     #============================================================================================================
     def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=24, parent_folder=None):
@@ -217,7 +254,8 @@ python ./postprocess.py
         cell_a = inputs['structure'].cell[0][0]
         precision *= self.inputs.precision.value
         nkpoints = max(min_kpoints, int(30 * 2.5/cell_a * precision))
-        kpoints = self._get_kpoints(nkpoints)
+        use_symmetry = runtype != "bands"
+        kpoints = self._get_kpoints(nkpoints, use_symmetry=use_symmetry)
         inputs['kpoints'] = kpoints
 
         # parallelization settings
@@ -280,22 +318,17 @@ python ./postprocess.py
         return ParameterData(dict=params)
 
     #============================================================================================================
-    def _get_kpoints(self,nx=1,ny=1,nz=1, set_list=False):
-        if nx < 1.0:
-            nx=1
-        if ny < 1.0:
-            ny=1
-        if nz < 1.0:
-            nz=1
-
+    def _get_kpoints(self, nx, use_symmetry=True):
+        nx = max(1, nx)
+        
         kpoints = KpointsData()
-        if set_list is False:
-            kpoints.set_kpoints_mesh([nx,ny,nz], offset=[0.0,0.0,0.0] )
+        if use_symmetry:
+            kpoints.set_kpoints_mesh([nx, 1, 1], offset=[0.0, 0.0, 0.0] )
         else:
-            points=[]
-            for i in np.linspace(0,0.5,nx):
-                points.append([i,0.0, 0.0])
+            # list kpoints explicitly
+            points = [[r, 0.0, 0.0] for r in np.linspace(0, 0.5, nx)]
             kpoints.set_kpoints(points)
+            
         return kpoints
 
     #============================================================================================================
