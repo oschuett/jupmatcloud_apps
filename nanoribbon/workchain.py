@@ -31,9 +31,9 @@ class NanoribbonWorkChain(WorkChain):
             cls.run_cell_opt1,
             cls.run_cell_opt2,
             cls.run_scf,
-            cls.run_export_orbitals,
             cls.run_export_hartree,
             cls.run_bands,
+            cls.run_export_orbitals,
         )
         spec.dynamic_output()
 
@@ -54,7 +54,71 @@ class NanoribbonWorkChain(WorkChain):
         prev_calc = self.ctx.cell_opt2
         assert(prev_calc.get_state() == 'FINISHED')
         structure = prev_calc.out.output_structure
-        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=2.0, min_kpoints=5)
+        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=2.0, min_kpoints=5, wallhours=3)
+
+    #============================================================================================================
+    def run_export_hartree(self):
+        self.report("Running pp.x to export hartree potential")
+
+        inputs = {}
+        inputs['_label'] = "export_hartree"
+        inputs['code'] = self.inputs.pp_code
+
+        prev_calc = self.ctx.scf
+        assert(prev_calc.get_state() == 'FINISHED')
+        inputs['parent_folder'] = prev_calc.out.remote_folder
+
+        structure = prev_calc.inp.structure
+        cell_a = structure.cell[0][0]
+        cell_b = structure.cell[1][1]
+        cell_c = structure.cell[2][2]
+
+        parameters = ParameterData(dict={
+                  'inputpp':{
+                      'plot_num': 11, # the V_bare + V_H potential
+                  },
+                  'plot':{
+                      'iflag': 2, # 2D plot
+                      'output_format': 7, # format suitable for gnuplot   (2D) x, y, f(x,y)
+                      'x0(1)': 0.0, #3D vector, origin of the plane (in alat units)
+                      'x0(2)': 0.0,
+                      'x0(3)': cell_c/cell_a,
+                      'e1(1)': cell_a/cell_a, #3D vectors which determine the plotting plane (in alat units)
+                      'e1(2)': 0.0,
+                      'e1(3)': 0.0,
+                      'e2(1)': 0.0,
+                      'e2(2)': cell_b/cell_a,
+                      'e2(3)': 0.0,
+                      'nx': 10, # Number of points in the plane
+                      'ny': 10,
+                      'fileout': 'vacuum_hartree.dat',
+                  },
+        })
+        inputs['parameters'] = parameters
+
+        settings = ParameterData(dict={'additional_retrieve_list':['vacuum_hartree.dat']})
+        inputs['settings'] = settings
+
+        inputs['_options'] = {
+            "resources": {"num_machines": 1},
+            "max_wallclock_seconds": 10 * 60,
+            # workaround for flaw in PpCalculator. We don't want to retrive this huge intermediate file.
+            "append_text": u"rm -v aiida.filplot\n",
+        }
+
+        future = submit(PpCalculation.process(), **inputs)
+        return ToContext(hartree=Calc(future))
+
+
+    #============================================================================================================
+    def run_bands(self):
+        prev_calc = self.ctx.scf
+        assert(prev_calc.get_state() == 'FINISHED')
+        structure = prev_calc.inp.structure
+        parent_folder = prev_calc.out.remote_folder
+        return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', 
+                                    precision=4.0, min_kpoints=10, wallhours=10)
+
 
     #============================================================================================================
     def run_export_orbitals(self):
@@ -63,14 +127,14 @@ class NanoribbonWorkChain(WorkChain):
         inputs = {}
         inputs['_label'] = "export_orbitals"
         inputs['code'] = self.inputs.pp_code
-        prev_calc = self.ctx.scf
+        prev_calc = self.ctx.band
         assert(prev_calc.get_state() == 'FINISHED')
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
         nel = prev_calc.res.number_of_electrons
         nkpt = prev_calc.res.number_of_k_points
-        kband1 = int(nel/2) - 1
-        kband2 = int(nel/2) + 2
+        kband1 = int(nel/2) - 4
+        kband2 = int(nel/2) + 5
         kpoint1 = round(0.1*nkpt)
         kpoint2 = round(nkpt+1-0.1*nkpt)
 
@@ -136,70 +200,7 @@ python ./postprocess.py
 
 
     #============================================================================================================
-    def run_export_hartree(self):
-        self.report("Running pp.x to export hartree potential")
-
-        inputs = {}
-        inputs['_label'] = "export_hartree"
-        inputs['code'] = self.inputs.pp_code
-
-        prev_calc = self.ctx.scf
-        assert(prev_calc.get_state() == 'FINISHED')
-        inputs['parent_folder'] = prev_calc.out.remote_folder
-
-        structure = prev_calc.inp.structure
-        cell_a = structure.cell[0][0]
-        cell_b = structure.cell[1][1]
-        cell_c = structure.cell[2][2]
-
-        parameters = ParameterData(dict={
-                  'inputpp':{
-                      'plot_num': 11, # the V_bare + V_H potential
-                  },
-                  'plot':{
-                      'iflag': 2, # 2D plot
-                      'output_format': 7, # format suitable for gnuplot   (2D) x, y, f(x,y)
-                      'x0(1)': 0.0, #3D vector, origin of the plane (in alat units)
-                      'x0(2)': 0.0,
-                      'x0(3)': cell_c/cell_a,
-                      'e1(1)': cell_a/cell_a, #3D vectors which determine the plotting plane (in alat units)
-                      'e1(2)': 0.0,
-                      'e1(3)': 0.0,
-                      'e2(1)': 0.0,
-                      'e2(2)': cell_b/cell_a,
-                      'e2(3)': 0.0,
-                      'nx': 10, # Number of points in the plane
-                      'ny': 10,
-                      'fileout': 'vacuum_hartree.dat',
-                  },
-        })
-        inputs['parameters'] = parameters
-
-        settings = ParameterData(dict={'additional_retrieve_list':['vacuum_hartree.dat']})
-        inputs['settings'] = settings
-
-        inputs['_options'] = {
-            "resources": {"num_machines": 1},
-            "max_wallclock_seconds": 10 * 60,
-            # workaround for flaw in PpCalculator. We don't want to retrive this huge intermediate file.
-            "append_text": u"rm -v aiida.filplot\n",
-        }
-
-        future = submit(PpCalculation.process(), **inputs)
-        return ToContext(hartree=Calc(future))
-
-
-    #============================================================================================================
-    def run_bands(self):
-        prev_calc = self.ctx.scf
-        assert(prev_calc.get_state() == 'FINISHED')
-        structure = prev_calc.inp.structure
-        parent_folder = prev_calc.out.remote_folder
-        return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', precision=4.0, min_kpoints=10)
-
-
-    #============================================================================================================
-    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, parent_folder=None):
+    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=24, parent_folder=None):
         self.report("Running pw.x for "+label)
 
         inputs = {}
@@ -214,7 +215,7 @@ python ./postprocess.py
         # kpoints
         cell_a = inputs['structure'].cell[0][0]
         precision *= self.inputs.precision.value
-        nkpoints = max(min_kpoints, int(30 * cell_a/2.5 * precision))
+        nkpoints = max(min_kpoints, int(30 * 2.5/cell_a * precision))
         kpoints = self._get_kpoints(nkpoints)
         inputs['kpoints'] = kpoints
 
@@ -224,7 +225,7 @@ python ./postprocess.py
         nnodes = (1 + natoms/30) * npools
         inputs['_options'] = {
             "resources": {"num_machines": nnodes},
-            "max_wallclock_seconds": 60 * 60, # one hour
+            "max_wallclock_seconds": wallhours * 60 * 60, # hours
         }
         settings = {'cmdline': ["-npools",str(npools)]}
 
