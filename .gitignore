@@ -1,5 +1,5 @@
 *~
-.pyc
+*.pyc
 .*.ipynb
 .ipynb_checkpoints
 
