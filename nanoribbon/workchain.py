@@ -173,11 +173,11 @@ for fn in glob("*.cube"):
     cube = np.fromstring("".join(lines[natoms+6:]), sep=' ').reshape(nx, ny, nz)
 
     # plan
-    dz = header[3,3]
-    bohr = int(1.0 / dz)
-    z0 = nz/2 + 2*bohr # start two bohr above surface
-    z1 = z0   + 4*bohr # take four layers at one bohr distance
-    zcuts = range(z0, z1+1, bohr)
+    dz = header[3,3]*0.529177
+    angstrom = int(1.0 / dz)
+    z0 = nz/2 + 1*angstrom # start one angstrom above surface
+    z1 = z0   + 4*angstrom # take four layers at one angstrom distance
+    zcuts = range(z0, z1+1, angstrom)
 
     # output
     lines[2] = "%5.d 0.0 0.0 %f\n"%(natoms,  z0*dz) # change offset header
