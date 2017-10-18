@@ -57,7 +57,7 @@ class NanoribbonWorkChain(WorkChain):
         prev_calc = self.ctx.cell_opt2
         assert(prev_calc.get_state() == 'FINISHED')
         structure = prev_calc.out.output_structure
-        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=2.0, min_kpoints=5, wallhours=3)
+        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=2.0, min_kpoints=5, wallhours=1)
 
     #============================================================================================================
     def run_export_hartree(self):
@@ -190,9 +190,10 @@ EOF
 python ./postprocess.py
 """
 
+        ncube_files = (kband2 - kband1 + 1) * (kpoint2 - kpoint1 + 1)
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": 10 * 60,
+            "max_wallclock_seconds": ncube_files * 25, # heuristic
             "append_text": append_text,
         }
 
@@ -234,11 +235,11 @@ python ./postprocess.py
         inputs['settings'] = settings
 
         future = submit(ProjwfcCalculation.process(), **inputs)
-        return ToContext(orbitals=Calc(future))
+        return ToContext(pdos=Calc(future))
 
 
     #============================================================================================================
-    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=24, parent_folder=None):
+    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=3, parent_folder=None):
         self.report("Running pw.x for "+label)
 
         inputs = {}
