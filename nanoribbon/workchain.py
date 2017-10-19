@@ -37,6 +37,7 @@ class NanoribbonWorkChain(WorkChain):
             cls.run_bands,
             cls.run_export_orbitals,
             #cls.run_export_pdos,
+            cls.run_export_spinden,
         )
         spec.dynamic_output()
 
@@ -57,7 +58,8 @@ class NanoribbonWorkChain(WorkChain):
         prev_calc = self.ctx.cell_opt2
         assert(prev_calc.get_state() == 'FINISHED')
         structure = prev_calc.out.output_structure
-        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=2.0, min_kpoints=5, wallhours=1)
+        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=2.0, min_kpoints=5, wallhours=4)
+
 
     #============================================================================================================
     def run_export_hartree(self):
@@ -104,7 +106,7 @@ class NanoribbonWorkChain(WorkChain):
 
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": 10 * 60,
+            "max_wallclock_seconds": 20 * 60,
             # workaround for flaw in PpCalculator. We don't want to retrive this huge intermediate file.
             "append_text": u"rm -v aiida.filplot\n",
         }
@@ -120,7 +122,7 @@ class NanoribbonWorkChain(WorkChain):
         structure = prev_calc.inp.structure
         parent_folder = prev_calc.out.remote_folder
         return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', 
-                                    precision=4.0, min_kpoints=10, wallhours=10)
+                                    precision=4.0, min_kpoints=10, wallhours=6)
 
 
     #============================================================================================================
@@ -158,43 +160,11 @@ class NanoribbonWorkChain(WorkChain):
         })
         inputs['parameters'] = parameters
 
-        append_text = ur"""
-cat > postprocess.py << EOF
-
-from glob import glob
-import numpy as np
-import gzip
-
-for fn in glob("*.cube"):
-    # parse
-    lines = open(fn).readlines()
-    header = np.fromstring("".join(lines[2:6]), sep=' ').reshape(4,4)
-    natoms, nx, ny, nz = header[:,0].astype(int)
-    cube = np.fromstring("".join(lines[natoms+6:]), sep=' ').reshape(nx, ny, nz)
-
-    # plan
-    dz = header[3,3]*0.529177
-    angstrom = int(1.0 / dz)
-    z0 = nz/2 + 1*angstrom # start one angstrom above surface
-    z1 = z0   + 4*angstrom # take four layers at one angstrom distance
-    zcuts = range(z0, z1+1, angstrom)
-
-    # output
-    lines[2] = "%5.d 0.0 0.0 %f\n"%(natoms,  z0*dz) # change offset header
-    lines[5] = "%6.d 0.0 0.0 %f\n"%(len(zcuts), dz) # change shape header
-    with gzip.open(fn+".gz", "w") as f:
-        f.write("".join(lines[:natoms+6])) # write header
-        np.savetxt(f, cube[:,:,zcuts].reshape(-1, len(zcuts)), fmt="%.5e")
-EOF
-
-python ./postprocess.py
-"""
-
         ncube_files = (kband2 - kband1 + 1) * (kpoint2 - kpoint1 + 1)
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": ncube_files * 25, # heuristic
-            "append_text": append_text,
+            "max_wallclock_seconds": min (2 * ncube_files * 25, 24 * 60 *60), # heuristic
+            "append_text": self._get_cube_cutter(),
         }
 
         settings = ParameterData(dict={'additional_retrieve_list':['*.cube.gz']})
@@ -203,7 +173,49 @@ python ./postprocess.py
         future = submit(PpCalculation.process(), **inputs)
         return ToContext(orbitals=Calc(future))
 
-    
+
+    #============================================================================================================
+    def run_export_spinden(self):
+        self.report("Running pp.x to compute spinden")
+
+        inputs = {}
+        inputs['_label'] = "export_spinden"
+        inputs['code'] = self.inputs.pp_code
+        prev_calc = self.ctx.bands
+        assert(prev_calc.get_state() == 'FINISHED')
+        inputs['parent_folder'] = prev_calc.out.remote_folder
+
+        nspin = prev_calc.res.number_of_spin_components
+        if nspin == 1:
+            self.report("Skipping, got only one spin channel")
+            return
+
+        parameters = ParameterData(dict={
+                  'inputpp':{
+                      'plot_num': 6, # spin polarization (rho(up)-rho(down))
+
+                  },
+                  'plot':{
+                      'iflag': 3, # 3D plot
+                      'output_format': 6, # CUBE format
+                      'fileout': '_spin.cube',
+                  },
+        })
+        inputs['parameters'] = parameters
+
+        inputs['_options'] = {
+            "resources": {"num_machines": 1},
+            "max_wallclock_seconds": 30 * 60, # 20 minutes
+            "append_text": self._get_cube_cutter(),
+        }
+
+        settings = ParameterData(dict={'additional_retrieve_list':['*.cube.gz']})
+        inputs['settings'] = settings
+
+        future = submit(PpCalculation.process(), **inputs)
+        return ToContext(spinden=Calc(future))
+
+
     #============================================================================================================
     def run_export_pdos(self):
         self.report("Running projwfc.x to export PDOS")
@@ -218,20 +230,20 @@ python ./postprocess.py
         parameters = ParameterData(dict={
                   'projwfc':{
                       'ngauss': 1,
-                      'kbanddegauss': 0.007,
+                      'degauss': 0.007,
                       'DeltaE': 0.01,
-                      'filproj': 'the_k_projection.out',
-                      'kresolveddos': True,
+                      'filproj': 'projection.out',
+                      #'kresolveddos': True,
                   },
         })
         inputs['parameters'] = parameters
 
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": 10 * 60, # 10 minutes
+            "max_wallclock_seconds":  1 * 20 * 60, # 20 minutes
         }
 
-        settings = ParameterData(dict={'additional_retrieve_list':['*.xml']})
+        settings = ParameterData(dict={'additional_retrieve_list':['*.out', '*.xml']})
         inputs['settings'] = settings
 
         future = submit(ProjwfcCalculation.process(), **inputs)
@@ -239,7 +251,7 @@ python ./postprocess.py
 
 
     #============================================================================================================
-    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=3, parent_folder=None):
+    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=24, parent_folder=None):
         self.report("Running pw.x for "+label)
 
         inputs = {}
@@ -353,5 +365,40 @@ python ./postprocess.py
             else:
                 start_mag[i.name] = 0.0
         return start_mag
+
+    #============================================================================================================
+    def _get_cube_cutter(self):
+        append_text = ur"""
+cat > postprocess.py << EOF
+
+from glob import glob
+import numpy as np
+import gzip
+
+for fn in glob("*.cube"):
+    # parse
+    lines = open(fn).readlines()
+    header = np.fromstring("".join(lines[2:6]), sep=' ').reshape(4,4)
+    natoms, nx, ny, nz = header[:,0].astype(int)
+    cube = np.fromstring("".join(lines[natoms+6:]), sep=' ').reshape(nx, ny, nz)
+
+    # plan
+    dz = header[3,3]*0.529177
+    angstrom = int(1.0 / dz)
+    z0 = nz/2 + 1*angstrom # start one angstrom above surface
+    z1 = z0   + 4*angstrom # take four layers at one angstrom distance
+    zcuts = range(z0, z1+1, angstrom)
+
+    # output
+    lines[2] = "%5.d 0.0 0.0 %f\n"%(natoms,  z0*dz) # change offset header
+    lines[5] = "%6.d 0.0 0.0 %f\n"%(len(zcuts), dz) # change shape header
+    with gzip.open(fn+".gz", "w") as f:
+        f.write("".join(lines[:natoms+6])) # write header
+        np.savetxt(f, cube[:,:,zcuts].reshape(-1, len(zcuts)), fmt="%.5e")
+EOF
+
+python ./postprocess.py
+"""
+        return append_text
 
 #EOF
