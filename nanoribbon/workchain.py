@@ -383,8 +383,8 @@ for fn in glob("*.cube"):
     cube = np.fromstring("".join(lines[natoms+6:]), sep=' ').reshape(nx, ny, nz)
 
     # plan
-    dz = header[3,3]*0.529177
-    angstrom = int(1.0 / dz)
+    dz = header[3,3]
+    angstrom = int(1.88972 / dz)
     z0 = nz/2 + 1*angstrom # start one angstrom above surface
     z1 = z0   + 4*angstrom # take four layers at one angstrom distance
     zcuts = range(z0, z1+1, angstrom)
