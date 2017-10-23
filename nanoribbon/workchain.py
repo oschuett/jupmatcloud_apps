@@ -163,7 +163,7 @@ class NanoribbonWorkChain(WorkChain):
         ncube_files = (kband2 - kband1 + 1) * (kpoint2 - kpoint1 + 1)
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": min (2 * ncube_files * 25, 24 * 60 *60), # heuristic
+            "max_wallclock_seconds": min (2 * ncube_files * 120, 24 * 60 *60), # heuristic
             "append_text": self._get_cube_cutter(),
         }
 
