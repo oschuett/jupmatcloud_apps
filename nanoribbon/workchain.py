@@ -391,7 +391,7 @@ for fn in glob("*.cube"):
 
     # output
     lines[2] = "%5.d 0.0 0.0 %f\n"%(natoms,  z0*dz) # change offset header
-    lines[5] = "%6.d 0.0 0.0 %f\n"%(len(zcuts), dz) # change shape header
+    lines[5] = "%6.d 0.0 0.0 %f\n"%(len(zcuts), angstrom*dz) # change shape header
     with gzip.open(fn+".gz", "w") as f:
         f.write("".join(lines[:natoms+6])) # write header
         np.savetxt(f, cube[:,:,zcuts].reshape(-1, len(zcuts)), fmt="%.5e")
