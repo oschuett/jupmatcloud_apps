@@ -36,7 +36,7 @@ class NanoribbonWorkChain(WorkChain):
             cls.run_export_hartree,
             cls.run_bands,
             cls.run_export_orbitals,
-            cls.run_export_pdos,
+            #cls.run_export_pdos,
             cls.run_export_spinden,
         )
         spec.dynamic_output()
