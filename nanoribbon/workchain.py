@@ -33,10 +33,11 @@ class NanoribbonWorkChain(WorkChain):
             cls.run_cell_opt1,
             cls.run_cell_opt2,
             cls.run_scf,
+            cls.run_export_pdos,
             cls.run_export_hartree,
             cls.run_bands,
+            cls.run_bands_lowres,
             cls.run_export_orbitals,
-            #cls.run_export_pdos,
             cls.run_export_spinden,
         )
         spec.dynamic_output()
@@ -123,6 +124,16 @@ class NanoribbonWorkChain(WorkChain):
         parent_folder = prev_calc.out.remote_folder
         return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', 
                                     precision=4.0, min_kpoints=10, wallhours=6)
+
+
+    #============================================================================================================
+    def run_bands_lowres(self):
+        prev_calc = self.ctx.scf
+        assert(prev_calc.get_state() == 'FINISHED')
+        structure = prev_calc.inp.structure
+        parent_folder = prev_calc.out.remote_folder
+        return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', 
+                                    precision=0.0, min_kpoints=12, wallhours=6)
 
 
     #============================================================================================================
@@ -223,7 +234,7 @@ class NanoribbonWorkChain(WorkChain):
         inputs = {}
         inputs['_label'] = "export_pdos"
         inputs['code'] = self.inputs.projwfc_code
-        prev_calc = self.ctx.bands
+        prev_calc = self.ctx.scf
         assert(prev_calc.get_state() == 'FINISHED')
         inputs['parent_folder'] = prev_calc.out.remote_folder
         
@@ -233,14 +244,15 @@ class NanoribbonWorkChain(WorkChain):
                       'degauss': 0.007,
                       'DeltaE': 0.01,
                       'filproj': 'projection.out',
+                      'filpdos' : 'totdos',
                       #'kresolveddos': True,
                   },
         })
         inputs['parameters'] = parameters
 
         inputs['_options'] = {
-            "resources": {"num_machines": 1},
-            "max_wallclock_seconds":  1 * 20 * 60, # 20 minutes
+            "resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1},
+            "max_wallclock_seconds":  1 * 60 * 60, # 1 hour
         }
 
         settings = ParameterData(dict={'additional_retrieve_list':['*.out', '*.xml']})
