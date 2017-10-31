@@ -59,7 +59,7 @@ class NanoribbonWorkChain(WorkChain):
         prev_calc = self.ctx.cell_opt2
         assert(prev_calc.get_state() == 'FINISHED')
         structure = prev_calc.out.output_structure
-        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=2.0, min_kpoints=5, wallhours=4)
+        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=3.0, min_kpoints=10, wallhours=4)
 
 
     #============================================================================================================
@@ -123,7 +123,7 @@ class NanoribbonWorkChain(WorkChain):
         structure = prev_calc.inp.structure
         parent_folder = prev_calc.out.remote_folder
         return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', 
-                                    precision=4.0, min_kpoints=10, wallhours=6)
+                                    precision=4.0, min_kpoints=20, wallhours=6)
 
 
     #============================================================================================================
@@ -143,15 +143,15 @@ class NanoribbonWorkChain(WorkChain):
         inputs = {}
         inputs['_label'] = "export_orbitals"
         inputs['code'] = self.inputs.pp_code
-        prev_calc = self.ctx.bands
+        prev_calc = self.ctx.bands_lowres
         assert(prev_calc.get_state() == 'FINISHED')
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
         nel = prev_calc.res.number_of_electrons
         nkpt = prev_calc.res.number_of_k_points
         nspin = prev_calc.res.number_of_spin_components
-        kband1 = int(nel/2) - 4
-        kband2 = int(nel/2) + 5
+        kband1 = int(nel/2) - 6
+        kband2 = int(nel/2) + 7
         kpoint1 = 1
         kpoint2 = nkpt * nspin
 
@@ -171,10 +171,9 @@ class NanoribbonWorkChain(WorkChain):
         })
         inputs['parameters'] = parameters
 
-        ncube_files = (kband2 - kband1 + 1) * (kpoint2 - kpoint1 + 1)
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": min (2 * ncube_files * 120, 24 * 60 *60), # heuristic
+            "max_wallclock_seconds": 12* 60 *60, # 12 hours
             "append_text": self._get_cube_cutter(),
         }
 
@@ -398,7 +397,7 @@ for fn in glob("*.cube"):
     dz = header[3,3]
     angstrom = int(1.88972 / dz)
     z0 = nz/2 + 1*angstrom # start one angstrom above surface
-    z1 = z0   + 4*angstrom # take four layers at one angstrom distance
+    z1 = z0   + 3*angstrom # take three layers at one angstrom distance
     zcuts = range(z0, z1+1, angstrom)
 
     # output
