@@ -132,7 +132,7 @@ class NanoribbonWorkChain(WorkChain):
         assert(prev_calc.get_state() == 'FINISHED')
         structure = prev_calc.inp.structure
         parent_folder = prev_calc.out.remote_folder
-        return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', 
+        return self._submit_pw_calc(structure, label="bands_lowres", parent_folder=parent_folder, runtype='bands', 
                                     precision=0.0, min_kpoints=12, wallhours=6)
 
 
@@ -244,7 +244,7 @@ class NanoribbonWorkChain(WorkChain):
                       'degauss': 0.007,
                       'DeltaE': 0.01,
                       'filproj': 'projection.out',
-                      'filpdos' : 'totdos',
+                      #'filpdos' : 'totdos',
                       #'kresolveddos': True,
                   },
         })
@@ -255,7 +255,7 @@ class NanoribbonWorkChain(WorkChain):
             "max_wallclock_seconds":  1 * 60 * 60, # 1 hour
         }
 
-        settings = ParameterData(dict={'additional_retrieve_list':['*.out', '*.xml']})
+        settings = ParameterData(dict={'additional_retrieve_list':['./out/aiida.save/atomic_proj.xml', '*_up', '*_down', '*_tot']})
         inputs['settings'] = settings
 
         future = submit(ProjwfcCalculation.process(), **inputs)
