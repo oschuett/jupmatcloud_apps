@@ -44,26 +44,29 @@ class StructureBrowser(ipw.VBox):
         qb = QueryBuilder()
         min_age = datetime.datetime.now() - datetime.timedelta(days=self.age_range.value[0])
         max_age = datetime.datetime.now() - datetime.timedelta(days=self.age_range.value[1])
-        ctime = {'and':[{'<=': min_age},{'>': max_age}]}
+        filters = {}
+        filters["ctime"] = {'and':[{'<=': min_age},{'>': max_age}]}
         
         if self.mode.value == "uploaded":
             qb2 = QueryBuilder()
             qb2.append(StructureData, project=["id"])
             qb2.append(Node, input_of=StructureData)
             processed_nodes = [n[0] for n in qb2.all()]
-            qb.append(StructureData, filters={"id":{"!in":processed_nodes}, "ctime":ctime})
+            if processed_nodes:
+                filters['id'] = {"!in":processed_nodes}
+            qb.append(StructureData, filters=filters)
             
         elif self.mode.value == "calculated":
             qb.append(JobCalculation)
-            qb.append(StructureData, output_of=JobCalculation, filters={"ctime":ctime})
+            qb.append(StructureData, output_of=JobCalculation, filters=filters)
             
         elif self.mode.value == "edited":
             qb.append(WorkCalculation)
-            qb.append(StructureData, output_of=WorkCalculation, filters={"ctime":ctime})
+            qb.append(StructureData, output_of=WorkCalculation, filters=filters)
 
         else:
             self.mode.value == "all"
-            qb.append(StructureData, filters={"ctime":ctime})
+            qb.append(StructureData, filters=filters)
 
         qb.order_by({StructureData:{'ctime':'desc'}})
         matches = set([n[0] for n in qb.iterall()])
