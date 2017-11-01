@@ -60,7 +60,7 @@ class NanoribbonWorkChain(WorkChain):
         prev_calc = self.ctx.cell_opt2
         self._check_prev_calc(prev_calc)
         structure = prev_calc.out.output_structure
-        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=3.0, min_kpoints=10, wallhours=1)
+        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=3.0, min_kpoints=10, wallhours=4)
 
 
     #============================================================================================================
@@ -134,7 +134,7 @@ class NanoribbonWorkChain(WorkChain):
         structure = prev_calc.inp.structure
         parent_folder = prev_calc.out.remote_folder
         return self._submit_pw_calc(structure, label="bands_lowres", parent_folder=parent_folder, runtype='bands', 
-                                    precision=0.0, min_kpoints=12, wallhours=6)
+                                    precision=0.0, min_kpoints=12, wallhours=2)
 
 
     #============================================================================================================
@@ -175,7 +175,7 @@ class NanoribbonWorkChain(WorkChain):
 
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": 1* 60 *60, # 1 hours
+            "max_wallclock_seconds": 6* 60 *60, # 6 hours
             "append_text": self._get_cube_cutter(),
         }
 
@@ -253,7 +253,7 @@ class NanoribbonWorkChain(WorkChain):
 
         inputs['_options'] = {
             "resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1},
-            "max_wallclock_seconds":  1 * 60 * 60, # 1 hour
+            "max_wallclock_seconds":  4 * 60 * 60, # 4 hours
         }
 
         settings = ParameterData(dict={'additional_retrieve_list':['./out/aiida.save/atomic_proj.xml', '*_up', '*_down', '*_tot']})
@@ -281,7 +281,7 @@ class NanoribbonWorkChain(WorkChain):
 
 
     #============================================================================================================
-    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=1, parent_folder=None):
+    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=24, parent_folder=None):
         self.report("Running pw.x for "+label)
 
         inputs = {}
