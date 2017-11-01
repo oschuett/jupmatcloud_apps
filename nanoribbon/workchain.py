@@ -33,9 +33,10 @@ class NanoribbonWorkChain(WorkChain):
             cls.run_cell_opt1,
             cls.run_cell_opt2,
             cls.run_scf,
-            cls.run_export_pdos,
+            #cls.run_export_pdos,
             cls.run_export_hartree,
             cls.run_bands,
+            cls.run_export_pdos,
             cls.run_bands_lowres,
             cls.run_export_orbitals,
             cls.run_export_spinden,
@@ -50,16 +51,16 @@ class NanoribbonWorkChain(WorkChain):
     #============================================================================================================
     def run_cell_opt2(self):
         prev_calc = self.ctx.cell_opt1
-        assert(prev_calc.get_state() == 'FINISHED')
+        self._check_prev_calc(prev_calc)
         structure = prev_calc.out.output_structure
         return self._submit_pw_calc(structure, label="cell_opt2", runtype='vc-relax', precision=1.0, min_kpoints=1)
 
     #============================================================================================================
     def run_scf(self):
         prev_calc = self.ctx.cell_opt2
-        assert(prev_calc.get_state() == 'FINISHED')
+        self._check_prev_calc(prev_calc)
         structure = prev_calc.out.output_structure
-        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=3.0, min_kpoints=10, wallhours=4)
+        return self._submit_pw_calc(structure, label="scf", runtype='scf', precision=3.0, min_kpoints=10, wallhours=1)
 
 
     #============================================================================================================
@@ -71,7 +72,7 @@ class NanoribbonWorkChain(WorkChain):
         inputs['code'] = self.inputs.pp_code
 
         prev_calc = self.ctx.scf
-        assert(prev_calc.get_state() == 'FINISHED')
+        self._check_prev_calc(prev_calc)
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
         structure = prev_calc.inp.structure
@@ -119,7 +120,7 @@ class NanoribbonWorkChain(WorkChain):
     #============================================================================================================
     def run_bands(self):
         prev_calc = self.ctx.scf
-        assert(prev_calc.get_state() == 'FINISHED')
+        self._check_prev_calc(prev_calc)
         structure = prev_calc.inp.structure
         parent_folder = prev_calc.out.remote_folder
         return self._submit_pw_calc(structure, label="bands", parent_folder=parent_folder, runtype='bands', 
@@ -129,7 +130,7 @@ class NanoribbonWorkChain(WorkChain):
     #============================================================================================================
     def run_bands_lowres(self):
         prev_calc = self.ctx.scf
-        assert(prev_calc.get_state() == 'FINISHED')
+        self._check_prev_calc(prev_calc)
         structure = prev_calc.inp.structure
         parent_folder = prev_calc.out.remote_folder
         return self._submit_pw_calc(structure, label="bands_lowres", parent_folder=parent_folder, runtype='bands', 
@@ -144,14 +145,15 @@ class NanoribbonWorkChain(WorkChain):
         inputs['_label'] = "export_orbitals"
         inputs['code'] = self.inputs.pp_code
         prev_calc = self.ctx.bands_lowres
-        assert(prev_calc.get_state() == 'FINISHED')
+        self._check_prev_calc(prev_calc)
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
         nel = prev_calc.res.number_of_electrons
         nkpt = prev_calc.res.number_of_k_points
+        nbnd = prev_calc.res.number_of_bands
         nspin = prev_calc.res.number_of_spin_components
-        kband1 = int(nel/2) - 6
-        kband2 = int(nel/2) + 7
+        kband1 = max(int(nel/2) - 6,1)
+        kband2 = min(int(nel/2) + 7,nbnd)
         kpoint1 = 1
         kpoint2 = nkpt * nspin
 
@@ -173,7 +175,7 @@ class NanoribbonWorkChain(WorkChain):
 
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": 12* 60 *60, # 12 hours
+            "max_wallclock_seconds": 1* 60 *60, # 1 hours
             "append_text": self._get_cube_cutter(),
         }
 
@@ -191,8 +193,8 @@ class NanoribbonWorkChain(WorkChain):
         inputs = {}
         inputs['_label'] = "export_spinden"
         inputs['code'] = self.inputs.pp_code
-        prev_calc = self.ctx.bands
-        assert(prev_calc.get_state() == 'FINISHED')
+        prev_calc = self.ctx.scf
+        self._check_prev_calc(prev_calc)
         inputs['parent_folder'] = prev_calc.out.remote_folder
 
         nspin = prev_calc.res.number_of_spin_components
@@ -215,7 +217,7 @@ class NanoribbonWorkChain(WorkChain):
 
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": 30 * 60, # 20 minutes
+            "max_wallclock_seconds": 30 * 60, # 30 minutes
             "append_text": self._get_cube_cutter(),
         }
 
@@ -233,8 +235,8 @@ class NanoribbonWorkChain(WorkChain):
         inputs = {}
         inputs['_label'] = "export_pdos"
         inputs['code'] = self.inputs.projwfc_code
-        prev_calc = self.ctx.scf
-        assert(prev_calc.get_state() == 'FINISHED')
+        prev_calc = self.ctx.bands
+        self._check_prev_calc(prev_calc)
         inputs['parent_folder'] = prev_calc.out.remote_folder
         
         parameters = ParameterData(dict={
@@ -262,7 +264,24 @@ class NanoribbonWorkChain(WorkChain):
 
 
     #============================================================================================================
-    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=24, parent_folder=None):
+    def _check_prev_calc(self, prev_calc):
+        error = None
+        if prev_calc.get_state() != 'FINISHED':
+            error = "Previous calculation in state: "+prev_calc.get_state()
+        elif "aiida.out" not in prev_calc.out.retrieved.get_folder_list():
+            error = "Previous calculation did not retrive aiida.out"
+        else:
+            fn = prev_calc.out.retrieved.get_abs_path("aiida.out")
+            content = open(fn).read()
+            if "JOB DONE." not in content:
+                error = "Previous calculation's aiida.out does not contain JOB DONE."
+        if error:
+            self.report("ERROR: "+error)
+            raise Exception(error)
+
+
+    #============================================================================================================
+    def _submit_pw_calc(self, structure, label, runtype, precision, min_kpoints, wallhours=1, parent_folder=None):
         self.report("Running pw.x for "+label)
 
         inputs = {}
