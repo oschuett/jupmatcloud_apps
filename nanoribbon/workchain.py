@@ -237,6 +237,8 @@ class NanoribbonWorkChain(WorkChain):
         inputs['code'] = self.inputs.projwfc_code
         prev_calc = self.ctx.bands
         self._check_prev_calc(prev_calc)
+        volume = prev_calc.res.volume
+        nnodes = int(volume/1600)
         inputs['parent_folder'] = prev_calc.out.remote_folder
         
         parameters = ParameterData(dict={
@@ -252,8 +254,8 @@ class NanoribbonWorkChain(WorkChain):
         inputs['parameters'] = parameters
 
         inputs['_options'] = {
-            "resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1},
-            "max_wallclock_seconds":  4 * 60 * 60, # 4 hours
+            "resources": {"num_machines": nnodes, "num_mpiprocs_per_machine": 1},
+            "max_wallclock_seconds":  2 * 60 * 60, # 4 hours
         }
 
         settings = ParameterData(dict={'additional_retrieve_list':['./out/aiida.save/atomic_proj.xml', '*_up', '*_down', '*_tot']})
