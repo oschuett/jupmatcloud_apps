@@ -238,7 +238,7 @@ class NanoribbonWorkChain(WorkChain):
         prev_calc = self.ctx.bands
         self._check_prev_calc(prev_calc)
         volume = prev_calc.res.volume
-        nnodes = int(volume/1600)
+        nnodes = max(1, int(volume/1600))
         inputs['parent_folder'] = prev_calc.out.remote_folder
         
         parameters = ParameterData(dict={
@@ -306,7 +306,7 @@ class NanoribbonWorkChain(WorkChain):
         # parallelization settings
         npools = min(1+nkpoints/5, 5)
         natoms = len(structure.sites)
-        nnodes = (1 + natoms/30) * npools
+        nnodes = (1 + natoms/60) * npools
         inputs['_options'] = {
             "resources": {"num_machines": nnodes},
             "max_wallclock_seconds": wallhours * 60 * 60, # hours
