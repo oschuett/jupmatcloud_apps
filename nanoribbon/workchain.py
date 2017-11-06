@@ -152,10 +152,12 @@ class NanoribbonWorkChain(WorkChain):
         nkpt = prev_calc.res.number_of_k_points
         nbnd = prev_calc.res.number_of_bands
         nspin = prev_calc.res.number_of_spin_components
+        volume = prev_calc.res.volume
         kband1 = max(int(nel/2) - 6,1)
         kband2 = min(int(nel/2) + 7,nbnd)
         kpoint1 = 1
         kpoint2 = nkpt * nspin
+        nhours = 2 + min(22,2*int(volume/1500))
 
         parameters = ParameterData(dict={
                   'inputpp':{
@@ -175,7 +177,7 @@ class NanoribbonWorkChain(WorkChain):
 
         inputs['_options'] = {
             "resources": {"num_machines": 1},
-            "max_wallclock_seconds": 6* 60 *60, # 6 hours
+            "max_wallclock_seconds": nhours* 60 *60, # 6 hours
             "append_text": self._get_cube_cutter(),
         }
 
