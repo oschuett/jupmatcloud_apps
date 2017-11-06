@@ -11,7 +11,6 @@ import datetime
 class StructureBrowser(ipw.VBox):
     
     def __init__(self):
-        self.preprocess()
         layout = ipw.Layout(width="900px")
 
         self.mode = ipw.RadioButtons(options=['all', 'uploaded', 'edited', 'calculated'], layout=ipw.Layout(width="100px"))
@@ -40,6 +39,7 @@ class StructureBrowser(ipw.VBox):
 
     
     def search(self, c=None):
+        self.preprocess()
         
         qb = QueryBuilder()
         min_age = datetime.datetime.now() - datetime.timedelta(days=self.age_range.value[0])
