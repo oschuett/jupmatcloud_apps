@@ -279,6 +279,7 @@ class NanoribbonWorkChain(WorkChain):
                 error = "Previous calculation's aiida.out does not contain JOB DONE."
         if error:
             self.report("ERROR: "+error)
+            self.abort(msg=error)
             raise Exception(error)
 
 
