@@ -257,7 +257,7 @@ class NanoribbonWorkChain(WorkChain):
 
         inputs['_options'] = {
             "resources": {"num_machines": nnodes, "num_mpiprocs_per_machine": 1},
-            "max_wallclock_seconds":  2 * 60 * 60, # 4 hours
+            "max_wallclock_seconds":  12 * 60 * 60, # 12 hours
         }
 
         settings = ParameterData(dict={'additional_retrieve_list':['./out/aiida.save/atomic_proj.xml', '*_up', '*_down', '*_tot']})
