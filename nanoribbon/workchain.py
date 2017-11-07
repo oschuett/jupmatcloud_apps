@@ -240,7 +240,8 @@ class NanoribbonWorkChain(WorkChain):
         prev_calc = self.ctx.bands
         self._check_prev_calc(prev_calc)
         volume = prev_calc.res.volume
-        nnodes = max(1, int(volume/1600))
+        nnodes = max(1, int(volume/1500))
+        nhours = 2 + min(22,2*int(volume/1500))
         inputs['parent_folder'] = prev_calc.out.remote_folder
         
         parameters = ParameterData(dict={
@@ -257,7 +258,7 @@ class NanoribbonWorkChain(WorkChain):
 
         inputs['_options'] = {
             "resources": {"num_machines": nnodes, "num_mpiprocs_per_machine": 1},
-            "max_wallclock_seconds":  12 * 60 * 60, # 12 hours
+            "max_wallclock_seconds":  nhours * 60 * 60, # 12 hours
         }
 
         settings = ParameterData(dict={'additional_retrieve_list':['./out/aiida.save/atomic_proj.xml', '*_up', '*_down', '*_tot']})
