@@ -8,6 +8,8 @@ from aiida.orm.code import Code
 from aiida.work.workchain import WorkChain, ToContext, Calc
 from aiida.work.run import run, async, submit
 
+from aiida_cp2k.calculations import Cp2kCalculation
+
 import tempfile
 import shutil
 import numpy as np
@@ -58,6 +60,7 @@ class SlabGeoOptWorkChain(WorkChain):
         inputs = {}
         inputs['_label'] = "slab_geo_opt"
         inputs['code'] = code
+        inputs['file'] = {}
         
         # make sure we're really dealing with a gold slab
         atoms = structure.get_ase() # slow
@@ -72,12 +75,12 @@ class SlabGeoOptWorkChain(WorkChain):
         
         # structure
         molslab_f, mol_f = cls.mk_coord_files(atoms, first_slab_atom)
-        inputs['mol_slab_coords'] = molslab_f
-        inputs['mol_coords'] = mol_f
-        
+        inputs['file']['molslab_coords'] = molslab_f
+        inputs['file']['mol_coords'] = mol_f
+
         # Au potential
         pot_f = SinglefileData(file='/project/apps/surfaces/slab/Au.pot')
-        inputs['au_pot'] = pot_f
+        inputs['file']['au_pot'] = pot_f
         
         # parameters
         cell_abc = "%f  %f  %f" % (atoms.cell[0,0], atoms.cell[1,1], atoms.cell[2,2])
@@ -85,8 +88,8 @@ class SlabGeoOptWorkChain(WorkChain):
         inputs['parameters'] = ParameterData(dict=inp)
         
         # settings
-        #settings = ParameterData(dict={'additional_retrieve_list':['vacuum_hartree.dat']})
-        #inputs['settings'] = settings
+        settings = ParameterData(dict={'additional_retrieve_list':['*.pdb']})
+        inputs['settings'] = settings
         
         # resources
         inputs['_options'] = {
@@ -148,8 +151,7 @@ class SlabGeoOptWorkChain(WorkChain):
             'GEO_OPT': {
                 'MAX_FORCE': '1e-3',
                 'MAX_ITER': '100'
-                
-            }
+            },
         }
         
         return motion    
