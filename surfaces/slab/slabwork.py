@@ -25,6 +25,7 @@ class SlabGeoOptWorkChain(WorkChain):
         spec.input("dftb_switch", valid_type=Bool, default=Bool(False), required=True)
         spec.input("vdw_switch", valid_type=Bool, default=Bool(False), required=False)
         spec.input("mgrid_cutoff", valid_type=Int, default=Int(600), required=False)
+        spec.input("fixed_atoms", valid_type=Str, default=Str(''), required=True)
 
         spec.outline(
             cls.run_geopt
@@ -51,14 +52,14 @@ class SlabGeoOptWorkChain(WorkChain):
     def run_geopt(self):
         self.report("Running CP2K geometry optimization")
 
-        inputs = self.build_calc_inputs(self.inputs.structure, self.inputs.cp2k_code, self.inputs.max_force, self.inputs.dftb_switch, self.inputs.mgrid_cutoff, self.inputs.vdw_switch)
+        inputs = self.build_calc_inputs(self.inputs.structure, self.inputs.cp2k_code, self.inputs.max_force, self.inputs.dftb_switch, self.inputs.mgrid_cutoff, self.inputs.vdw_switch, self.inputs.fixed_atoms)
 
         future = submit(Cp2kCalculation.process(), **inputs)
         return ToContext(geo_opt=Calc(future))
 
     # ==============================================================================================
     @classmethod
-    def build_calc_inputs(cls, structure, code, max_force, dftb_switch, mgrid_cutoff, vdw_switch):
+    def build_calc_inputs(cls, structure, code, max_force, dftb_switch, mgrid_cutoff, vdw_switch, fixed_atoms):
 
         inputs = {}
         inputs['_label'] = "slab_geo_opt"
@@ -95,7 +96,7 @@ class SlabGeoOptWorkChain(WorkChain):
             num_machines = int(np.ceil(1. + first_slab_atom/120.))
             walltime = 24 * 3600
 
-        inp = cls.get_cp2k_input(cell_abc, first_slab_atom, len(atoms), max_force, dftb_switch, mgrid_cutoff, vdw_switch, machine_cores*num_machines)
+        inp = cls.get_cp2k_input(cell_abc, first_slab_atom, len(atoms), max_force, dftb_switch, mgrid_cutoff, vdw_switch, machine_cores*num_machines, fixed_atoms)
         inputs['parameters'] = ParameterData(dict=inp)
 
         # settings
@@ -131,7 +132,7 @@ class SlabGeoOptWorkChain(WorkChain):
 
     # ==============================================================================================
     @classmethod
-    def get_cp2k_input(cls, cell_abc, first_slab_atom, last_slab_atom, max_force, dftb_switch, mgrid_cutoff, vdw_switch, machine_cores):
+    def get_cp2k_input(cls, cell_abc, first_slab_atom, last_slab_atom, max_force, dftb_switch, mgrid_cutoff, vdw_switch, machine_cores, fixed_atoms):
         inp = {
             'MULTIPLE_FORCE_EVALS': {
                 'FORCE_EVAL_ORDER': '2 3',
@@ -140,7 +141,7 @@ class SlabGeoOptWorkChain(WorkChain):
             'GLOBAL': {
                 'RUN_TYPE': 'GEO_OPT'
             },
-            'MOTION': cls.get_motion(first_slab_atom, last_slab_atom, max_force),
+            'MOTION': cls.get_motion(first_slab_atom, last_slab_atom, max_force, fixed_atoms),
             'FORCE_EVAL': [cls.force_eval_mixed(cell_abc, first_slab_atom, last_slab_atom, machine_cores),
                            cls.force_eval_fist(cell_abc),
                            ],
@@ -155,11 +156,11 @@ class SlabGeoOptWorkChain(WorkChain):
 
     # ==============================================================================================
     @classmethod
-    def get_motion(cls, first_slab_atom, last_slab_atom, max_force):
+    def get_motion(cls, first_slab_atom, last_slab_atom, max_force, fixed_atoms):
         motion = {
             'CONSTRAINT': {
                 'FIXED_ATOMS': {
-                    'LIST': '%d..%d' % (first_slab_atom, last_slab_atom),
+                    'LIST': '%s' % (fixed_atoms),
                 }
             },
             'GEO_OPT': {
