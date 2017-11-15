@@ -22,7 +22,7 @@ class SlabGeoOptWorkChain(WorkChain):
         spec.input("cp2k_code", valid_type=Code)
         spec.input("structure", valid_type=StructureData)
         spec.input("max_force", valid_type=Float, default=Float(0.001), required=False)
-        spec.input("dftb_switch", valid_type=Str, default=Str('dftb'), required=True)
+        spec.input("dftb_switch", valid_type=Bool, default=Bool(False), required=True)
         spec.input("vdw_switch", valid_type=Bool, default=Bool(False), required=False)
         spec.input("mgrid_cutoff", valid_type=Int, default=Int(600), required=False)
 
@@ -87,7 +87,15 @@ class SlabGeoOptWorkChain(WorkChain):
 
         # parameters
         cell_abc = "%f  %f  %f" % (atoms.cell[0, 0], atoms.cell[1, 1], atoms.cell[2, 2])
-        inp = cls.get_cp2k_input(cell_abc, first_slab_atom, len(atoms), max_force, dftb_switch, mgrid_cutoff, vdw_switch)
+        machine_cores = code.get_remote_computer().get_default_mpiprocs_per_machine()
+        if int(dftb_switch) == 1:
+            num_machines = int(np.ceil(1. + first_slab_atom/30.))
+            walltime = int((1. + first_slab_atom/30.) * 3600.)
+        else:
+            num_machines = int(np.ceil(1. + first_slab_atom/120.))
+            walltime = 24 * 3600
+
+        inp = cls.get_cp2k_input(cell_abc, first_slab_atom, len(atoms), max_force, dftb_switch, mgrid_cutoff, vdw_switch, machine_cores*num_machines)
         inputs['parameters'] = ParameterData(dict=inp)
 
         # settings
@@ -96,8 +104,8 @@ class SlabGeoOptWorkChain(WorkChain):
 
         # resources
         inputs['_options'] = {
-            "resources": {"num_machines": 1},
-            "max_wallclock_seconds": 60 * 60,  # 60 min
+            "resources": {"num_machines": num_machines},
+            "max_wallclock_seconds": walltime,  # 60 min
         }
 
         return inputs
@@ -123,7 +131,7 @@ class SlabGeoOptWorkChain(WorkChain):
 
     # ==============================================================================================
     @classmethod
-    def get_cp2k_input(cls, cell_abc, first_slab_atom, last_slab_atom, max_force, dftb_switch, mgrid_cutoff, vdw_switch):
+    def get_cp2k_input(cls, cell_abc, first_slab_atom, last_slab_atom, max_force, dftb_switch, mgrid_cutoff, vdw_switch, machine_cores):
         inp = {
             'MULTIPLE_FORCE_EVALS': {
                 'FORCE_EVAL_ORDER': '2 3',
@@ -133,13 +141,13 @@ class SlabGeoOptWorkChain(WorkChain):
                 'RUN_TYPE': 'GEO_OPT'
             },
             'MOTION': cls.get_motion(first_slab_atom, last_slab_atom, max_force),
-            'FORCE_EVAL': [cls.force_eval_mixed(cell_abc, first_slab_atom, last_slab_atom),
+            'FORCE_EVAL': [cls.force_eval_mixed(cell_abc, first_slab_atom, last_slab_atom, machine_cores),
                            cls.force_eval_fist(cell_abc),
                            ],
         }
 
         if int(dftb_switch) == 0:
-            inp['FORCE_EVAL'].append(cls.get_force_eval_qs_dftb(cell_abc))
+            inp['FORCE_EVAL'].append(cls.get_force_eval_qs_dftb(cell_abc, vdw_switch))
         else:
             inp['FORCE_EVAL'].append(cls.get_force_eval_qs_dft(cell_abc, mgrid_cutoff, vdw_switch))
 
@@ -164,7 +172,7 @@ class SlabGeoOptWorkChain(WorkChain):
 
     # ==============================================================================================
     @classmethod
-    def force_eval_mixed(cls, cell_abc, first_slab_atom, last_slab_atom):
+    def force_eval_mixed(cls, cell_abc, first_slab_atom, last_slab_atom, machine_cores):
         first_mol_atom = 1
         last_mol_atom = first_slab_atom - 1
 
@@ -172,7 +180,7 @@ class SlabGeoOptWorkChain(WorkChain):
             'METHOD': 'MIXED',
             'MIXED': {
                 'MIXING_TYPE': 'GENMIX',
-                'GROUP_PARTITION': '2 38',  # IN THE HYPOTHESIS OF 40 cores
+                'GROUP_PARTITION': '2 %d' % (machine_cores-2),  # IN THE HYPOTHESIS OF 40 cores
                 'GENERIC': {
                     'ERROR_LIMIT': '1.0E-10',
                     'MIXING_FUNCTION': 'E1+E2',
@@ -264,7 +272,7 @@ class SlabGeoOptWorkChain(WorkChain):
 
     # ==============================================================================================
     @classmethod
-    def get_force_eval_qs_dftb(cls, cell_abc):
+    def get_force_eval_qs_dftb(cls, cell_abc, vdw_switch):
         force_eval = {
             'METHOD': 'Quickstep',
             'DFT': {
@@ -274,7 +282,7 @@ class SlabGeoOptWorkChain(WorkChain):
                     'EXTRAPOLATION_ORDER': '3',
                     'DFTB': {
                         'SELF_CONSISTENT': 'T',
-                        'DISPERSION': 'T',
+                        'DISPERSION': '%s' % (str(vdw_switch)[0]),
                         'ORTHOGONAL_BASIS': 'F',
                         'DO_EWALD': 'F',
                         'PARAMETER': {
